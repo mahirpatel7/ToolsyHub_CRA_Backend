@@ -7,6 +7,7 @@ const sharp = require("sharp");
 const cors = require("cors");
 const PDFDocument = require("pdfkit");
 const os = require("os");
+require("dotenv").config();
 
 const app = express();
 const upload = multer();
@@ -14,6 +15,10 @@ const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.static("public"));
+
+const PORT = process.env.PORT || 5000;
+
+console.log(".env", process.env.PORT);
 
 // Utility to generate 20-digit filename
 function generate20DigitNumber() {
@@ -320,8 +325,12 @@ app.post("/api/compress-pdf", memoryUpload.single("file"), async (req, res) => {
 /**
  * ✅ Start the Server
  */
-const PORT = 5000;
-app.listen(PORT, '192.168.29.6', () => {
-  console.log(`🚀 Server running at http://192.168.29.6:${PORT}`);
-});
+// const PORT = 5000;
+// app.listen(PORT, '192.168.29.6', () => {
+//   console.log(`🚀 Server running at http://192.168.29.6:${PORT}`);
+// });
 
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
