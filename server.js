@@ -58,9 +58,13 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
     fs.writeFileSync(inputPath, req.file.buffer);
 
     await new Promise((resolve, reject) => {
+      // execFile(
+      //   "python",
+      //   ["convert_pdf_to_docx.py", inputPath, outputPath],
+      const pythonCmd = os.platform() === "win32" ? "python" : "python3";
       execFile(
-        "python",
-        ["convert_pdf_to_docx.py", inputPath, outputPath],
+        pythonCmd,
+        [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
         (error) => {
           if (error) return reject(error);
           resolve();
@@ -111,7 +115,10 @@ app.post("/api/word-to-pdf", memoryUpload.single("file"), async (req, res) => {
   try {
     fs.writeFileSync(inputPath, req.file.buffer);
 
-    const librePath = "C:\\Program Files\\LibreOffice\\program\\soffice.exe";
+    // const librePath = "C:\\Program Files\\LibreOffice\\program\\soffice.exe";
+    const librePath = os.platform() === "win32"
+      ? "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+      : "libreoffice";
 
     await new Promise((resolve, reject) => {
       execFile(
@@ -320,6 +327,14 @@ app.post("/api/compress-pdf", memoryUpload.single("file"), async (req, res) => {
       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     } catch { }
   }
+});
+
+app.use((err, req, res, next) => {
+  console.error("❌ Server Error:", err);
+  res.status(500).json({
+    error: "Internal Server Error",
+    message: err.message
+  });
 });
 
 /**
