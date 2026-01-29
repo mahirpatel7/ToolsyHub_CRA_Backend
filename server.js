@@ -535,62 +535,125 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
 /**
  * 📝 Word to PDF Conversion using LibreOffice
  */
+// app.post("/api/word-to-pdf", memoryUpload.single("file"), async (req, res) => {
+//   if (!req.file) return res.status(400).send("No file uploaded");
+
+//   const tempDir = path.join(__dirname, "tmp");
+//   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+//   const originalBaseName = path.parse(req.file.originalname).name;
+//   const extension = path.extname(req.file.originalname);
+//   const uniqueInputFileName = `${originalBaseName}_${Date.now()}${extension}`;
+//   const inputPath = path.join(tempDir, uniqueInputFileName);
+
+//   try {
+//     fs.writeFileSync(inputPath, req.file.buffer);
+
+//     const librePath = os.platform() === "win32"
+//       ? "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+//       : "libreoffice";
+
+//     await new Promise((resolve, reject) => {
+//       execFile(
+//         librePath,
+//         ["--headless", "--convert-to", "pdf", "--outdir", tempDir, inputPath],
+//         (error) => {
+//           if (error) return reject(error);
+//           resolve();
+//         }
+//       );
+//     });
+
+//     const allFiles = fs.readdirSync(tempDir);
+//     const generatedPdfFile = allFiles.find(
+//       (f) =>
+//         f.endsWith(".pdf") &&
+//         f.toLowerCase().includes(originalBaseName.toLowerCase())
+//     );
+
+//     if (!generatedPdfFile) return res.status(500).send("PDF not created");
+
+//     const generatedPdfPath = path.join(tempDir, generatedPdfFile);
+//     const finalFilename = `${originalBaseName}.pdf`;
+
+//     res.setHeader("Content-Type", "application/pdf");
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename="${finalFilename}"`
+//     );
+//     res.send(fs.readFileSync(generatedPdfPath));
+//   } catch (err) {
+//     console.error("❌ Word to PDF conversion failed:", err);
+//     res.status(500).send("Conversion failed");
+//   } finally {
+//     try {
+//       fs.readdirSync(tempDir).forEach((file) => {
+//         fs.unlinkSync(path.join(tempDir, file));
+//       });
+//     } catch { }
+//   }
+// });
+
+
+/**
+ * 📝 Word to PDF Conversion using Python + reportlab
+ */
 app.post("/api/word-to-pdf", memoryUpload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
   const tempDir = path.join(__dirname, "tmp");
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
-  const originalBaseName = path.parse(req.file.originalname).name;
-  const extension = path.extname(req.file.originalname);
-  const uniqueInputFileName = `${originalBaseName}_${Date.now()}${extension}`;
-  const inputPath = path.join(tempDir, uniqueInputFileName);
+  const originalName = path.parse(req.file.originalname).name;
+  const timestamp = Date.now();
+  const inputPath = path.join(tempDir, `${originalName}_${timestamp}.docx`);
+  const outputPath = path.join(tempDir, `${originalName}_${timestamp}.pdf`);
 
   try {
+    // Write uploaded file to disk
     fs.writeFileSync(inputPath, req.file.buffer);
 
-    const librePath = os.platform() === "win32"
-      ? "C:\\Program Files\\LibreOffice\\program\\soffice.exe"
-      : "libreoffice";
-
+    // Call Python script
     await new Promise((resolve, reject) => {
+      const pythonCmd = os.platform() === "win32" ? "python" : "python3";
       execFile(
-        librePath,
-        ["--headless", "--convert-to", "pdf", "--outdir", tempDir, inputPath],
+        pythonCmd,
+        [path.join(__dirname, "convert_docx_to_pdf.py"), inputPath, outputPath],
         (error) => {
-          if (error) return reject(error);
+          if (error) {
+            console.error("Python error:", error);
+            return reject(error);
+          }
           resolve();
         }
       );
     });
 
-    const allFiles = fs.readdirSync(tempDir);
-    const generatedPdfFile = allFiles.find(
-      (f) =>
-        f.endsWith(".pdf") &&
-        f.toLowerCase().includes(originalBaseName.toLowerCase())
-    );
+    // Check if PDF was created
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).send("PDF not created");
+    }
 
-    if (!generatedPdfFile) return res.status(500).send("PDF not created");
-
-    const generatedPdfPath = path.join(tempDir, generatedPdfFile);
-    const finalFilename = `${originalBaseName}.pdf`;
-
+    // Read and send the PDF
+    const pdfBuffer = fs.readFileSync(outputPath);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${finalFilename}"`
+      `attachment; filename="${originalName}.pdf"`
     );
-    res.send(fs.readFileSync(generatedPdfPath));
+    res.send(pdfBuffer);
+
   } catch (err) {
     console.error("❌ Word to PDF conversion failed:", err);
-    res.status(500).send("Conversion failed");
+    res.status(500).send("Conversion failed: " + err.message);
   } finally {
+    // Cleanup temp files
     try {
-      fs.readdirSync(tempDir).forEach((file) => {
-        fs.unlinkSync(path.join(tempDir, file));
-      });
-    } catch { }
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    } catch (e) {
+      console.error("Cleanup error:", e);
+    }
   }
 });
 
