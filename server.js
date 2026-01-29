@@ -481,6 +481,60 @@ app.get("/api/endpoints", (req, res) => {
 /**
  * 📄 PDF to Word (DOCX) Conversion using LibreOffice
  */
+// app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
+//   if (!req.file) return res.status(400).send("No file uploaded");
+
+//   const tempDir = path.join(__dirname, "tmp");
+//   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+//   const originalName = path.parse(req.file.originalname).name;
+//   const inputPath = path.join(tempDir, `${originalName}_${Date.now()}.pdf`);
+//   const outputPath = inputPath.replace(/\.pdf$/i, ".docx");
+
+//   try {
+//     fs.writeFileSync(inputPath, req.file.buffer);
+
+//     await new Promise((resolve, reject) => {
+//       const pythonCmd = os.platform() === "win32" ? "python" : "python3";
+//       execFile(
+//         pythonCmd,
+//         [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
+//         (error) => {
+//           if (error) return reject(error);
+//           resolve();
+//         }
+//       );
+//     });
+
+//     if (!fs.existsSync(outputPath))
+//       return res.status(500).send("DOCX not created.");
+
+//     const docxBuffer = fs.readFileSync(outputPath);
+//     res.setHeader(
+//       "Content-Type",
+//       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+//     );
+//     res.setHeader(
+//       "Content-Disposition",
+//       `attachment; filename="${originalName}.docx"`
+//     );
+//     res.send(docxBuffer);
+//   } catch (err) {
+//     console.error("❌ PDF to Word conversion failed:", err);
+//     res.status(500).send("Conversion failed.");
+//   } finally {
+//     try {
+//       if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+//     } catch { }
+//     try {
+//       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+//     } catch { }
+//   }
+// });
+
+/**
+ * 📄 PDF to Word (DOCX) Conversion using Python
+ */
 app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
@@ -488,28 +542,49 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
   const originalName = path.parse(req.file.originalname).name;
-  const inputPath = path.join(tempDir, `${originalName}_${Date.now()}.pdf`);
-  const outputPath = inputPath.replace(/\.pdf$/i, ".docx");
+  const timestamp = Date.now();
+  const inputPath = path.join(tempDir, `${originalName}_${timestamp}.pdf`);
+  const outputPath = path.join(tempDir, `${originalName}_${timestamp}.docx`);
 
   try {
+    console.log("📄 Converting PDF to Word...");
+
+    // Write uploaded PDF to disk
     fs.writeFileSync(inputPath, req.file.buffer);
 
+    // Call Python script to convert
     await new Promise((resolve, reject) => {
       const pythonCmd = os.platform() === "win32" ? "python" : "python3";
       execFile(
         pythonCmd,
         [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
-        (error) => {
-          if (error) return reject(error);
+        { timeout: 60000 }, // 60 second timeout for large PDFs
+        (error, stdout, stderr) => {
+          if (error) {
+            console.error("❌ Python error:", error.message);
+            console.error("❌ stderr:", stderr);
+            return reject(error);
+          }
+          console.log("Python output:", stdout);
           resolve();
         }
       );
     });
 
-    if (!fs.existsSync(outputPath))
-      return res.status(500).send("DOCX not created.");
+    // Check if DOCX file was created
+    if (!fs.existsSync(outputPath)) {
+      console.error("❌ DOCX file not created at:", outputPath);
+      return res.status(500).send("DOCX file was not created.");
+    }
 
+    // Read the DOCX file
     const docxBuffer = fs.readFileSync(outputPath);
+
+    if (docxBuffer.length === 0) {
+      console.error("❌ DOCX file is empty");
+      return res.status(500).send("DOCX file is empty.");
+    }
+
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -518,17 +593,32 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
       "Content-Disposition",
       `attachment; filename="${originalName}.docx"`
     );
+
+    console.log("✅ PDF to Word conversion successful!");
     res.send(docxBuffer);
+
   } catch (err) {
     console.error("❌ PDF to Word conversion failed:", err);
-    res.status(500).send("Conversion failed.");
+    res.status(500).send("Conversion failed: " + err.message);
   } finally {
+    // Cleanup temporary files
     try {
-      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-    } catch { }
+      if (fs.existsSync(inputPath)) {
+        fs.unlinkSync(inputPath);
+        console.log("✅ Cleaned up input PDF");
+      }
+    } catch (e) {
+      console.error("Cleanup error for input:", e);
+    }
+
     try {
-      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-    } catch { }
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+        console.log("✅ Cleaned up output DOCX");
+      }
+    } catch (e) {
+      console.error("Cleanup error for output:", e);
+    }
   }
 });
 
