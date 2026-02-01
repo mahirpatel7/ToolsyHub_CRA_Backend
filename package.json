@@ -16,7 +16,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "app": "nodemon server.js",
-    "postinstall": "pip install pdf2docx python-docx reportlab"
+    "postinstall": "pip install PyPDF2 pdf2docx python-docx reportlab"
   },
   "keywords": [],
   "author": "",
