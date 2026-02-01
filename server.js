@@ -553,11 +553,12 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
     // IMPROVED: Add timeout and better error handling
     await new Promise((resolve, reject) => {
       const pythonCmd = os.platform() === "win32" ? "python" : "python3";
-      
+
       const pythonProcess = execFile(
         pythonCmd,
-        [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
-        { 
+        // [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
+        ["convert_pdf_to_docx.py", inputPath, outputPath],
+        {
           timeout: 120000, // 2 minutes (increased from 60s for large files)
           maxBuffer: 10 * 1024 * 1024 // 10MB buffer
         },
