@@ -548,41 +548,47 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
 
   try {
     console.log("📄 Converting PDF to Word...");
-
-    // Write uploaded PDF to disk
     fs.writeFileSync(inputPath, req.file.buffer);
 
-    // Call Python script to convert
+    // IMPROVED: Add timeout and better error handling
     await new Promise((resolve, reject) => {
       const pythonCmd = os.platform() === "win32" ? "python" : "python3";
-      execFile(
+      
+      const pythonProcess = execFile(
         pythonCmd,
         [path.join(__dirname, "convert_pdf_to_docx.py"), inputPath, outputPath],
-        { timeout: 60000 }, // 60 second timeout for large PDFs
+        { 
+          timeout: 120000, // 2 minutes (increased from 60s for large files)
+          maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+        },
         (error, stdout, stderr) => {
           if (error) {
             console.error("❌ Python error:", error.message);
-            console.error("❌ stderr:", stderr);
-            return reject(error);
+            if (stderr) console.error("❌ stderr:", stderr);
+            return reject(new Error(`Python execution failed: ${error.message}`));
           }
-          console.log("Python output:", stdout);
+          if (stdout) console.log("✅ Python output:", stdout);
           resolve();
         }
       );
+
+      // Kill process if it takes too long
+      setTimeout(() => {
+        if (pythonProcess && !pythonProcess.killed) {
+          pythonProcess.kill();
+          reject(new Error("Process timeout - PDF too large"));
+        }
+      }, 120000);
     });
 
-    // Check if DOCX file was created
+    // Verify output file exists
     if (!fs.existsSync(outputPath)) {
-      console.error("❌ DOCX file not created at:", outputPath);
-      return res.status(500).send("DOCX file was not created.");
+      throw new Error("DOCX file was not created");
     }
 
-    // Read the DOCX file
     const docxBuffer = fs.readFileSync(outputPath);
-
     if (docxBuffer.length === 0) {
-      console.error("❌ DOCX file is empty");
-      return res.status(500).send("DOCX file is empty.");
+      throw new Error("DOCX file is empty");
     }
 
     res.setHeader(
@@ -599,26 +605,22 @@ app.post("/api/pdf-to-word", memoryUpload.single("file"), async (req, res) => {
 
   } catch (err) {
     console.error("❌ PDF to Word conversion failed:", err);
-    res.status(500).send("Conversion failed: " + err.message);
+    res.status(500).json({
+      error: "Conversion failed",
+      message: err.message,
+      details: "Try with a smaller PDF or ensure the file is valid"
+    });
   } finally {
-    // Cleanup temporary files
-    try {
-      if (fs.existsSync(inputPath)) {
-        fs.unlinkSync(inputPath);
-        console.log("✅ Cleaned up input PDF");
+    // Cleanup
+    [inputPath, outputPath].forEach(filePath => {
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (e) {
+        console.error(`Cleanup failed for ${filePath}:`, e.message);
       }
-    } catch (e) {
-      console.error("Cleanup error for input:", e);
-    }
-
-    try {
-      if (fs.existsSync(outputPath)) {
-        fs.unlinkSync(outputPath);
-        console.log("✅ Cleaned up output DOCX");
-      }
-    } catch (e) {
-      console.error("Cleanup error for output:", e);
-    }
+    });
   }
 });
 

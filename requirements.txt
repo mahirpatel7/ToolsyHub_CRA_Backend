@@ -1,0 +1,6 @@
+Flask==2.3.0
+python-docx==0.8.11
+PyPDF2==4.0.1
+reportlab==4.0.4
+docx==0.2.3
+pip==23.3.1

@@ -25,26 +25,57 @@
 
 
 
-# convert_pdf_to_docx.py
+# convert_pdf_to_docx.py (OPTIMIZED VERSION)
 import sys
 import os
-from pdf2docx import convert
+from PyPDF2 import PdfReader
+from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 def convert_pdf_to_word(pdf_path, docx_path):
-    """Convert PDF to DOCX using pdf2docx"""
+    """
+    Convert PDF to DOCX using PyPDF2 + python-docx
+    - No system dependencies
+    - Fast processing
+    - Works on Render.com
+    """
     try:
-        print(f"📄 Converting {pdf_path} to {docx_path}")
+        print(f"📄 Extracting text from PDF: {pdf_path}")
         
-        # Use pdf2docx to convert
-        convert(
-            pdf_path,
-            docx_path,
-            start=0,
-            end=None,
-            pages=None
-        )
+        # Extract text from PDF
+        pdf_reader = PdfReader(pdf_path)
         
-        # Verify the output file was created
+        # Create new Word document
+        doc = Document()
+        
+        # Add title
+        title = doc.add_heading('Converted from PDF', 0)
+        title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        
+        # Extract and add content from each page
+        for page_num, page in enumerate(pdf_reader.pages, 1):
+            text = page.extract_text()
+            
+            if text.strip():
+                # Add page break between pages (except first)
+                if page_num > 1:
+                    doc.add_page_break()
+                
+                # Add page number
+                page_heading = doc.add_heading(f'Page {page_num}', level=2)
+                
+                # Split text into paragraphs and add to document
+                paragraphs = text.split('\n')
+                for para_text in paragraphs:
+                    if para_text.strip():
+                        para = doc.add_paragraph(para_text)
+                        para.paragraph_format.line_spacing = 1.15
+        
+        # Save the document
+        doc.save(docx_path)
+        
+        # Verify file was created
         if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
             print(f"✅ Successfully converted to: {docx_path}")
             return True
@@ -52,12 +83,10 @@ def convert_pdf_to_word(pdf_path, docx_path):
             print("❌ DOCX file was not created properly")
             return False
             
-    except ImportError as e:
-        print(f"❌ Import Error: {str(e)}")
-        print("Make sure pdf2docx is installed: pip install pdf2docx")
-        return False
     except Exception as e:
         print(f"❌ Conversion Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 if __name__ == "__main__":
