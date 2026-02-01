@@ -25,7 +25,7 @@
 
 
 
-# convert_pdf_to_docx.py (OPTIMIZED VERSION)
+# convert_pdf_to_docx.py
 import sys
 import os
 from PyPDF2 import PdfReader
